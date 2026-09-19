@@ -11,6 +11,7 @@ vi.mock("tasmota-webserial-esptool", () => ({
   CHIP_FAMILY_ESP32: 0,
   CHIP_FAMILY_ESP32C3: 5,
   CHIP_FAMILY_ESP32C5: 6,
+  CHIP_FAMILY_ESP32P4: 18,
   CHIP_FAMILY_ESP32S2: 2,
   CHIP_FAMILY_ESP32S3: 9,
   connectWithPort: connectWithPortMock,
@@ -135,6 +136,39 @@ describe("ESP board scanner", () => {
       }
     ]);
     expect(boards[0].logs.length).toBeGreaterThan(0);
+  });
+
+  it("includes P4 PSRAM capacity in scan results and logs", async () => {
+    const { bootloaderLoader, scanLoader } = createSuccessfulLoader();
+    Object.assign(scanLoader, {
+      chipName: "ESP32-P4",
+      chipRevision: 302,
+      getChipFamily: vi.fn(() => 18),
+      readRegister: vi.fn(async (address: number) => {
+        if (address !== 0x5012d04c) {
+          throw new Error(`Unexpected register ${address}`);
+        }
+        return 0x00044032; // 32 MB PSRAM, vendor 1, revision 3.2.
+      })
+    });
+    vi.stubGlobal("navigator", {
+      serial: { requestPort: vi.fn(async () => ({})) }
+    });
+    vi.stubGlobal("window", {});
+    connectWithPortMock.mockResolvedValueOnce(bootloaderLoader);
+
+    const [board] = await scanEspBoards();
+
+    expect(board).toMatchObject({
+      chipModel: "ESP32-P4",
+      chipRevision: 302,
+      psramDetected: true,
+      psramSizeBytes: 32 * 1024 * 1024
+    });
+    expect(board.logs).toContain("PSRAM from eFuse: 32 MB");
+    expect(scanLoader.eraseFlash).not.toHaveBeenCalled();
+    expect(scanLoader.writeFlash).not.toHaveBeenCalled();
+    expect(scanLoader.disconnect).toHaveBeenCalledOnce();
   });
 
   it("rejects when Web Serial is unavailable", async () => {

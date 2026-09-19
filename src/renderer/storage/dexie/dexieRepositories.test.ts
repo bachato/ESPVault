@@ -36,6 +36,28 @@ afterEach(async () => {
 });
 
 describe("Dexie repositories", () => {
+  it("retains P4 PSRAM scan metadata after reopening the database", async () => {
+    const database = createTestDatabase();
+    const boards = new DexieBoardRepository(database);
+    const board = await boards.create({
+      name: "Waveshare ESP32-P4",
+      chipModel: "ESP32-P4",
+      chipRevision: 302,
+      psramDetected: true,
+      psramSizeBytes: 32 * 1024 * 1024
+    });
+
+    database.close();
+    await database.open();
+
+    expect(await new DexieBoardRepository(database).get(board.id)).toMatchObject({
+      chipModel: "ESP32-P4",
+      chipRevision: 302,
+      psramDetected: true,
+      psramSizeBytes: 32 * 1024 * 1024
+    });
+  });
+
   it("opens the current schema with the expected tables", async () => {
     const database = createTestDatabase();
 

@@ -1,6 +1,7 @@
 import {
   CHIP_FAMILY_ESP32,
   CHIP_FAMILY_ESP32C3,
+  CHIP_FAMILY_ESP32P4,
   CHIP_FAMILY_ESP32S2,
   CHIP_FAMILY_ESP32S3,
   type ESPLoader,
@@ -29,6 +30,8 @@ const UART_CLKDIV_MASK = 0xfffff;
 
 const ESP32C3_EFUSE_BASE = 0x60008800;
 const ESP32C3_MAC_EFUSE_REG = ESP32C3_EFUSE_BASE + 0x044;
+
+const ESP32P4_EFUSE_MAC_SYS2_REG = 0x5012d04c;
 
 const ESP32S2_EFUSE_BASE = 0x3f41a000;
 const ESP32S2_MAC_EFUSE_REG = ESP32S2_EFUSE_BASE + 0x044;
@@ -126,6 +129,10 @@ export async function readChipMetadata(
   }
 
   try {
+    if (chipFamily === CHIP_FAMILY_ESP32P4) {
+      return await readEsp32P4Metadata(loader, logger);
+    }
+
     if (chipFamily === CHIP_FAMILY_ESP32S3) {
       return await readEsp32S3Metadata(loader);
     }
@@ -158,6 +165,27 @@ function emptyChipMetadata(): ChipMetadata {
     psramSizeBytes: null,
     psramDetected: null,
     psramVendor: null
+  };
+}
+
+async function readEsp32P4Metadata(loader: ESPLoader, logger: Logger): Promise<ChipMetadata> {
+  // BLOCK1 bits 77..79 (MAC_SYS2 bits 13..15), shared by rev 1.x and 3.x:
+  // https://github.com/espressif/esp-idf/blob/master/components/efuse/esp32p4/esp_efuse_table.csv
+  // https://github.com/espressif/esp-idf/blob/master/components/efuse/esp32p4/esp_efuse_table_v3.0.csv
+  const capacityCode = await readBits(loader, ESP32P4_EFUSE_MAC_SYS2_REG, 13, 0x07);
+
+  // Code 2 is observed on 32 MB in-package P4 PSRAM:
+  // https://inspector.jstoner.net/ (ESP32-P4-Core hardware inventory).
+  // Do not reuse the S3 encoding or infer sizes for unverified P4 codes.
+  if (capacityCode !== 2) {
+    logger.debug(`ESP32-P4 PSRAM capacity code ${capacityCode} is not recognized; capacity remains unknown.`);
+    return emptyChipMetadata();
+  }
+
+  return {
+    ...emptyChipMetadata(),
+    psramSizeBytes: megabytes(32),
+    psramDetected: true
   };
 }
 
