@@ -2,6 +2,14 @@
 
 All notable changes to ESP Board Vault are documented in this file.
 
+## 1.0.34
+
+### Fixed
+
+- Detect ESP32-P4 32 MB in-package PSRAM from eFuse metadata during scans,
+  keeping unrecognized capacity codes and failed reads marked as unknown
+  ([#15](https://github.com/thelastoutpostworkshop/ESPVault/issues/15)).
+
 ## 1.0.33
 
 ### Changed
